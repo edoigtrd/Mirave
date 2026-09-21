@@ -13,6 +13,58 @@ probability distribution over those options, in a single forward pass.
 This repo is the code: data loading, training, inference, evaluation, and a
 mock HTTP server that speaks the same wire format as the real Jev API.
 
+## Try it
+
+Two ways to run the model — neither needs MongoDB or any of the training
+pipeline below, that's only for retraining.
+
+### Docker (fastest)
+
+```bash
+docker run --gpus all -p 8000:8000 \
+    -e HF_TOKEN=<token with read access to the model repo> \
+    edoigtrd/mirave-inference:latest
+```
+
+Starts an HTTP server at `http://localhost:8000` compatible with the real
+Jev API's documented contract (`POST /v1/systemone`):
+
+```bash
+curl -X POST http://localhost:8000/v1/systemone \
+  -H "Authorization: Bearer dev-key" -H "Content-Type: application/json" \
+  -d '{
+    "state": "I was charged twice and need the duplicate refunded today.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this",
+        "criteria": {"billing": "Payment issues", "technical": "Bugs", "sales": "Pricing questions"}
+      }
+    }
+  }'
+```
+
+Or use the official `typesafe-sdk` Python client pointed at it instead of
+the real API — see [`exemple.py`](exemple.py) for a working example.
+
+No GPU? Drop `--gpus all` and add `-e MIRAVE_DEVICE=cpu` — same image, just
+slower. Full env var reference in [`MODEL_CARD.md`](MODEL_CARD.md#docker-image).
+
+### Local (Python, no Docker)
+
+```bash
+uv sync
+uv run infer.py --checkpoint Edoigtrd/Mirave-0.6B-xlm-roberta-large \
+    --kind choice --state "..." --question "..." \
+    --options "option a" "option b" "option c"
+```
+
+`--checkpoint` downloads straight from the model's (private) HF repo — set
+`HF_TOKEN` to a token with read access to
+[Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large).
+Point it at a local directory instead once you've trained your own
+checkpoint with `train.py` below.
+
 ## Setup
 
 Requires Python 3.14+ and [uv](https://docs.astral.sh/uv/). A local MongoDB
@@ -70,36 +122,32 @@ uv run evaluate.py --checkpoint checkpoints/xlmr-large-pointer/best --split test
 
 ## Inference
 
-CLI, single example or a JSONL file of examples:
+`infer.py` also takes a JSONL file for batch inference instead of a single
+`--state`/`--question`/`--options` example (see [Try it](#try-it) above for
+the single-example form):
 
 ```bash
-uv run infer.py --checkpoint checkpoints/xlmr-large-pointer/best \
-    --kind choice --state "..." --question "..." \
-    --options "option a" "option b" "option c"
+uv run infer.py --checkpoint checkpoints/xlmr-large-pointer/best --jsonl examples.jsonl
 ```
 
-### Mock HTTP server
+Each line: `{"state": ..., "question": ..., "kind": ..., "options": [...]}`.
 
-`inference/server.py` implements the real Jev API's documented contract
-(`POST /v1/systemone`, the `choice`/`score`/`noul` question types, the same
-response shape) against this project's own model, so client code written
-for the real API — including the real `typesafe-sdk` Python package — works
-unmodified against it. See [`exemple.py`](exemple.py) for a working example
-pointed at a local instance.
+### Mock HTTP server, from source
 
-```bash
-uv run uvicorn inference.server:app --host 0.0.0.0 --port 8000
-```
-
-Or via Docker (build context is `inference/`, not the repo root — run the
-build script rather than `docker build` directly, since it also copies in
-the two shared modules the server depends on):
+The [Try it](#try-it) section above runs the prebuilt image. To build it
+yourself instead — e.g. after retraining, or to change the server code —
+build context is `inference/`, not the repo root, so build via the script
+rather than `docker build` directly (it also copies in the two shared
+modules the server imports):
 
 ```bash
 ./inference/build.sh
-docker run --gpus all -p 8000:8000 \
-    -e HF_TOKEN=<token with read access to the model repo> \
-    edoigtrd/mirave-inference:latest
+```
+
+Or run it straight from Python, no Docker at all:
+
+```bash
+uv run uvicorn inference.server:app --host 0.0.0.0 --port 8000
 ```
 
 Env vars: `MIRAVE_CHECKPOINT` (local path or HF repo id, defaults to the

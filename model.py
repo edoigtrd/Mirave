@@ -9,6 +9,7 @@ from each option's </opt> hidden state.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -149,10 +150,21 @@ def save_checkpoint(
     (output_dir / CONFIG_FILE).write_text(json.dumps(config, indent=2))
 
 
+def resolve_checkpoint(spec: str | Path) -> Path:
+    """A local checkpoint directory, or a HF Hub repo id to download (private
+    repos need HF_TOKEN set)."""
+    if Path(spec).exists():
+        return Path(spec)
+
+    from huggingface_hub import snapshot_download
+
+    return Path(snapshot_download(repo_id=str(spec), token=os.environ.get("HF_TOKEN")))
+
+
 def load_checkpoint(
     checkpoint_dir: str | Path, device: str | torch.device = "cpu"
 ) -> tuple[PointerModel, PreTrainedTokenizerBase]:
-    checkpoint_dir = Path(checkpoint_dir)
+    checkpoint_dir = resolve_checkpoint(checkpoint_dir)
     config = json.loads((checkpoint_dir / CONFIG_FILE).read_text())
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir / TOKENIZER_SUBDIR)

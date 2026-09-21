@@ -64,19 +64,11 @@ MODEL_NAME = "mirave-0.6b-xlm-roberta-large"
 NOUL_OPTIONS = ["no", "yes"]
 
 
-def resolve_checkpoint(spec: str) -> str:
-    """A local directory, or a HF Hub repo id to download (private repos
-    need HF_TOKEN set — this is how the Docker image gets weights without
-    baking them into the image)."""
-    if Path(spec).exists():
-        return spec
-    from huggingface_hub import snapshot_download
-
-    return snapshot_download(repo_id=spec, token=os.environ.get("HF_TOKEN"))
-
-
 print(f"loading checkpoint '{CHECKPOINT}' onto {DEVICE}...", flush=True)
-_model, _tokenizer = load_checkpoint(resolve_checkpoint(CHECKPOINT), device=DEVICE)
+# load_checkpoint resolves CHECKPOINT itself — a local dir, or a HF Hub repo
+# id to download (private repos need HF_TOKEN set — this is how the Docker
+# image gets weights without baking them into the image).
+_model, _tokenizer = load_checkpoint(CHECKPOINT, device=DEVICE)
 print("ready.", flush=True)
 
 
