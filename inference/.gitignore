@@ -1,0 +1,4 @@
+# Copied in fresh by build.sh from the repo root on every build — not the
+# source of truth, don't hand-edit or commit these.
+model.py
+dataset.py
