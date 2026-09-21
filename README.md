@@ -21,9 +21,7 @@ pipeline below, that's only for retraining.
 ### Docker (fastest)
 
 ```bash
-docker run --gpus all -p 8000:8000 \
-    -e HF_TOKEN=<token with read access to the model repo> \
-    edoigtrd/mirave-inference:latest
+docker run --gpus all -p 8000:8000 edoigtrd/mirave-inference:latest
 ```
 
 Starts an HTTP server at `http://localhost:8000` compatible with the real
@@ -59,11 +57,10 @@ uv run infer.py --checkpoint Edoigtrd/Mirave-0.6B-xlm-roberta-large \
     --options "option a" "option b" "option c"
 ```
 
-`--checkpoint` downloads straight from the model's (private) HF repo — set
-`HF_TOKEN` to a token with read access to
-[Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large).
-Point it at a local directory instead once you've trained your own
-checkpoint with `train.py` below.
+`--checkpoint` downloads straight from
+[Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large)
+on the Hub. Point it at a local directory instead once you've trained your
+own checkpoint with `train.py` below.
 
 ## Setup
 

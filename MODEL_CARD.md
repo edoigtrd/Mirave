@@ -158,9 +158,7 @@ written for the real API (including the official `typesafe-sdk` Python
 package) works against it unmodified.
 
 ```bash
-docker run --gpus all -p 8000:8000 \
-    -e HF_TOKEN=<token with read access to this repo> \
-    edoigtrd/mirave-inference:latest
+docker run --gpus all -p 8000:8000 edoigtrd/mirave-inference:latest
 ```
 
 [hub.docker.com/r/edoigtrd/mirave-inference](https://hub.docker.com/r/edoigtrd/mirave-inference)
@@ -173,7 +171,7 @@ slower. Environment variables:
 | `MIRAVE_CHECKPOINT` | this repo (`Edoigtrd/Mirave-0.6B-xlm-roberta-large`) | Local checkpoint path, or a HF repo id to download at startup. |
 | `MIRAVE_DEVICE` | `cuda` | `cuda` or `cpu`. |
 | `MIRAVE_API_KEY` | `dev-key` | Bearer token the mock server expects on `Authorization: Bearer <...>`. |
-| `HF_TOKEN` | — | Needed only when `MIRAVE_CHECKPOINT` points at a private HF repo (this one is private). |
+| `HF_TOKEN` | — | Only needed if `MIRAVE_CHECKPOINT` is pointed at a private HF repo instead of the (public) default above. |
 
 Source and build instructions: `inference/` in
 [github.com/edoigtrd/Mirave](https://github.com/edoigtrd/Mirave).
