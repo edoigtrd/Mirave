@@ -11,6 +11,7 @@ per-`kind` breakdown (never collapsed into one blended number, since
 the head's max-softmax confidence.
 
     uv run evaluate.py --checkpoint checkpoints/xlmr-large-pointer/best --split test
+    uv run evaluate.py --checkpoint checkpoints/xlmr-large-pointer/best --split test --output results.yaml
 """
 
 from __future__ import annotations
@@ -18,8 +19,10 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from functools import partial
+from typing import Any
 
 import torch
+import yaml
 from torch.utils.data import DataLoader
 
 from data import DB_NAME, mongo_client
@@ -37,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-length", type=int, default=512)
     p.add_argument("--ece-bins", type=int, default=15)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--output", "-o", help="write the full results to this YAML file, in addition to stdout")
     return p.parse_args()
 
 
@@ -117,15 +121,48 @@ def main() -> None:
     total_kl = sum(b["kl"] for b in per_kind.values())
     total_correct = sum(b["correct"] for b in per_kind.values())
 
-    print(f"split={args.split}  n={total_n}")
-    print(f"overall: cross_entropy={total_ce / total_n:.4f}  kl_vs_target={total_kl / total_n:.4f}  "
-          f"top1_acc={total_correct / total_n:.4f}  ECE={ece:.4f}")
+    results: dict[str, Any] = {
+        "checkpoint": args.checkpoint,
+        "split": args.split,
+        "n": total_n,
+        "overall": {
+            "cross_entropy": total_ce / total_n,
+            "kl_vs_target": total_kl / total_n,
+            "top1_acc": total_correct / total_n,
+            "ece": ece,
+        },
+        "by_kind": {
+            k: {
+                "n": b["n"],
+                "cross_entropy": b["ce"] / b["n"],
+                "kl_vs_target": b["kl"] / b["n"],
+                "top1_acc": b["correct"] / b["n"],
+            }
+            for k, b in sorted(per_kind.items())
+        },
+    }
+
+    print_results(results)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            yaml.safe_dump(results, f, sort_keys=False)
+        print(f"\nwrote {args.output}")
+
+
+def print_results(results: dict[str, Any]) -> None:
+    print(f"split={results['split']}  n={results['n']}")
+    overall = results["overall"]
+    print(
+        f"overall: cross_entropy={overall['cross_entropy']:.4f}  "
+        f"kl_vs_target={overall['kl_vs_target']:.4f}  "
+        f"top1_acc={overall['top1_acc']:.4f}  ECE={overall['ece']:.4f}"
+    )
     print()
     print(f"{'kind':<20}{'n':>8}{'cross_entropy':>16}{'kl_vs_target':>16}{'top1_acc':>12}")
-    for k, b in sorted(per_kind.items()):
+    for k, b in results["by_kind"].items():
         print(
-            f"{k:<20}{b['n']:>8}{b['ce'] / b['n']:>16.4f}{b['kl'] / b['n']:>16.4f}"
-            f"{b['correct'] / b['n']:>12.4f}"
+            f"{k:<20}{b['n']:>8}{b['cross_entropy']:>16.4f}{b['kl_vs_target']:>16.4f}"
+            f"{b['top1_acc']:>12.4f}"
         )
 
 

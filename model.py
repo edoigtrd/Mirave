@@ -115,6 +115,7 @@ def build_model(
     lora_r: int = 16,
     lora_alpha: int = 32,
     lora_dropout: float = 0.05,
+    gradient_checkpointing: bool = False,
 ) -> PointerModel:
     backbone = AutoModel.from_pretrained(base_model)
     backbone.resize_token_embeddings(len(tokenizer))
@@ -128,6 +129,12 @@ def build_model(
         modules_to_save=LORA_MODULES_TO_SAVE,
     )
     backbone = get_peft_model(backbone, lora_config)
+
+    if gradient_checkpointing:
+        # Trades compute for activation memory — worth it on xl/xxl, where
+        # the backbone (and the fully-trainable embedding table riding
+        # along with it) dominate VRAM; not needed for -large.
+        backbone.gradient_checkpointing_enable()
 
     hidden_size = backbone.config.hidden_size
     return PointerModel(backbone, hidden_size)

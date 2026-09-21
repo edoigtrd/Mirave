@@ -29,7 +29,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from data import DB_NAME, mongo_client
 from dataset import PointerJevDataset, collate
-from model import build_model, build_tokenizer, save_checkpoint
+from model import BASE_MODEL, build_model, build_tokenizer, save_checkpoint
 
 logger = logging.getLogger("train")
 
@@ -63,6 +63,14 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--output-dir", default="checkpoints/xlmr-large-pointer")
     p.add_argument("--log-dir", default="logs")
+    p.add_argument(
+        "--base-model", default=BASE_MODEL,
+        help="e.g. facebook/xlm-roberta-xl or facebook/xlm-roberta-xxl for the larger variants",
+    )
+    p.add_argument(
+        "--gradient-checkpointing", action="store_true",
+        help="trade compute for activation memory — needed for xl/xxl, not for -large",
+    )
     p.add_argument("--kind", default=None, help="restrict training to one `kind` (default: all)")
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--batch-size", type=int, default=8)
@@ -171,12 +179,14 @@ def main() -> None:
     client = mongo_client()
     db = client[DB_NAME]
 
-    tokenizer = build_tokenizer()
+    tokenizer = build_tokenizer(args.base_model)
     model = build_model(
         tokenizer,
+        base_model=args.base_model,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
+        gradient_checkpointing=args.gradient_checkpointing,
     )
     model.backbone.print_trainable_parameters()
 
