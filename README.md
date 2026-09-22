@@ -5,9 +5,18 @@ TypeSafe AI's "System One Model": instead of generating text, the model
 takes a `state` + `question` + a list of `options` and returns a calibrated
 probability distribution over those options, in a single forward pass.
 
-- **Model weights**: [huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large)
-  (LoRA adapter on `FacebookAI/xlm-roberta-large`) — see [`MODEL_CARD.md`](MODEL_CARD.md)
-  for the architecture, training procedure, and evaluation results.
+Two sizes are available, sharing the same head design, prompt format, and
+training data:
+
+- **-large**: [huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large)
+  (LoRA adapter on `FacebookAI/xlm-roberta-large`, 560M backbone) — see
+  [`MODEL_CARD_large.md`](MODEL_CARD_large.md) for architecture, training
+  procedure, and evaluation.
+- **-xl**: [huggingface.co/Edoigtrd/Mirave-4.2B-xlm-roberta-xl](https://huggingface.co/Edoigtrd/Mirave-4.2B-xlm-roberta-xl)
+  (LoRA adapter on `facebook/xlm-roberta-xl`, 3.5B backbone) — see
+  [`MODEL_CARD_XL.md`](MODEL_CARD_XL.md). Meaningfully more accurate
+  across every question kind (see its card's comparison table), at the
+  cost of a much larger backbone to download and run.
 - **Training data**: [`ZefanCai/Open-Jev`](https://huggingface.co/datasets/ZefanCai/Open-Jev)
 
 This repo is the code: data loading, training, inference, evaluation, and a
@@ -45,8 +54,13 @@ curl -X POST http://localhost:8000/v1/systemone \
 Or use the official `typesafe-sdk` Python client pointed at it instead of
 the real API — see [`exemple.py`](exemple.py) for a working example.
 
+Defaults to the **-large** checkpoint. For **-xl**, add
+`-e MIRAVE_CHECKPOINT=Edoigtrd/Mirave-4.2B-xlm-roberta-xl`.
+
 No GPU? Drop `--gpus all` and add `-e MIRAVE_DEVICE=cpu` — same image, just
-slower. Full env var reference in [`MODEL_CARD.md`](MODEL_CARD.md#docker-image).
+slower (much slower for -xl). Full env var reference in
+[`MODEL_CARD_large.md`](MODEL_CARD_large.md#docker-image) /
+[`MODEL_CARD_XL.md`](MODEL_CARD_XL.md#docker-image).
 
 ### Local (Python, no Docker)
 
@@ -59,8 +73,9 @@ uv run infer.py --checkpoint Edoigtrd/Mirave-0.6B-xlm-roberta-large \
 
 `--checkpoint` downloads straight from
 [Edoigtrd/Mirave-0.6B-xlm-roberta-large](https://huggingface.co/Edoigtrd/Mirave-0.6B-xlm-roberta-large)
-on the Hub. Point it at a local directory instead once you've trained your
-own checkpoint with `train.py` below.
+on the Hub — swap in `Edoigtrd/Mirave-4.2B-xlm-roberta-xl` for the -xl
+checkpoint instead. Point it at a local directory instead once you've
+trained your own checkpoint with `train.py` below.
 
 ## Setup
 
@@ -110,6 +125,17 @@ Trains on the `train` split only, model-selects against `validation`.
 `test`/`ood`/`calibration` are never touched during training. See
 `train.py --help` for hyperparameters (LoRA rank/alpha, learning rates,
 batch size, gradient clipping, ...).
+
+For the -xl backbone, use the preset wrapper instead — it sets the batch
+size, gradient accumulation, and `--gradient-checkpointing` this much
+bigger backbone needs, and won't fit a single 16GB consumer GPU the way
+-large does (the published -xl checkpoint was trained on a rented H100 —
+[RunPod](https://runpod.io?ref=5jrts9za) is one option for a GPU with
+enough headroom):
+
+```bash
+scripts/train_xl.sh
+```
 
 ## Evaluation
 

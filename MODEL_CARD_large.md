@@ -34,11 +34,13 @@ distribution over those options in a **single forward pass** — no text
 generation, no fixed-size output layer, and no upper bound on how many
 options a single call can score.
 
-It is a LoRA adapter + a small pointer head (~1M parameters) on top of the
+It is a LoRA adapter + a small pointer head (~2.1M parameters) on top of the
 frozen [`FacebookAI/xlm-roberta-large`](https://huggingface.co/FacebookAI/xlm-roberta-large)
-encoder. This card documents the **-large** (560M backbone) release; a
-larger `xlm-roberta-xl` (3.5B) variant, trained on more compute, is planned
-as a separate model sharing the same head design and prompt format.
+encoder. This card documents the **-large** (560M backbone) release. A
+larger [**-xl**](MODEL_CARD_XL.md) variant (3.5B backbone, `facebook/xlm-roberta-xl`)
+also exists, sharing the same head design, prompt format, and training
+dataset — see [Compared to -xl](#compared-to--xl) below for how the two
+stack up, and its own card for full details.
 
 Training/loading code, the dataset pipeline, and a Jev-API-compatible mock
 inference server live in the project repository:
@@ -58,8 +60,9 @@ inference server live in the project repository:
 | | |
 |---|---|
 | **Base model** | `FacebookAI/xlm-roberta-large` (560M params, 24 layers, hidden size 1024) |
-| **Adaptation** | LoRA (rank 16, alpha 32, dropout 0.05) on `query`/`key`/`value`/`dense` in every attention and feed-forward block, plus a fully fine-tuned token embedding table |
+| **Adaptation** | LoRA (rank 16, alpha 32, dropout 0.05) on `query`/`key`/`value`/`dense` in every attention and feed-forward block (~7.1M params), plus a fully fine-tuned token embedding table (~256.0M params) — ~263.1M trainable adapter parameters on top of the frozen backbone |
 | **Added head** | `PointerHead` — two `Linear(1024, 1024)` projections (query, key), ~2.1M parameters |
+| **Total parameters** | ~825.2M loaded (560M frozen backbone + ~265.2M trainable: ~263.1M adapter + ~2.1M head) |
 | **New vocabulary** | 8 special tokens: `<kind>`, `</kind>`, `<state>`, `</state>`, `<question>`, `</question>`, `<opt>`, `</opt>` |
 | **License** | MIT (inherited from the base model) |
 | **Language** | Multilingual capability inherited from XLM-R's 100-language pretraining; see [Training Data](#training-data) for what the fine-tuning set actually covers |
@@ -238,8 +241,8 @@ and `options` are.
   weight out of its stable range rather than ordinary overfitting or
   noise. The published checkpoint is from step 10,500, before this
   happened. Gradient clipping (max norm 1.0) has since been added to the
-  training script for future runs, including the planned `xlm-roberta-xl`
-  variant.
+  training script and was enabled from the start of the [-xl](MODEL_CARD_XL.md)
+  run, which completed all 3 epochs with no equivalent divergence.
 
 ## Evaluation
 
@@ -277,6 +280,40 @@ Note `choice`'s top-1 accuracy (0.61) looks lower than `noul`/`score`
 (0.85 each) but isn't directly comparable to them: `choice` items have up
 to 5–6 options against `noul`'s fixed 2, so chance-level accuracy is much
 lower to begin with.
+
+## Compared to -xl
+
+A larger variant, [**Mirave-4.2B-xlm-roberta-xl**](MODEL_CARD_XL.md), exists
+on top of `facebook/xlm-roberta-xl` instead of `xlm-roberta-large` — same
+head, same prompt format, same training data, ~6x the backbone parameters.
+On the shared `test` split (n=10,356):
+
+| | cross-entropy | KL vs. target | top-1 acc. | ECE |
+|---|---:|---:|---:|---:|
+| **-large** (this card) | 0.381 | 0.351 | 0.797 | 0.022 |
+| **-xl** | 0.229 | 0.199 | 0.893 | 0.015 |
+
+| kind | -large CE | -large top-1 | -xl CE | -xl top-1 |
+|---|---:|---:|---:|---:|
+| `choice` | 0.741 | 0.612 | 0.481 | 0.757 |
+| `noul` | 0.271 | 0.855 | 0.143 | 0.939 |
+| `score` | 0.278 | 0.850 | 0.192 | 0.912 |
+
+-xl is meaningfully better across every kind, most notably on `choice` —
+the kind this card flags as -large's weakest point (see
+[Limitations](#limitations-and-bias) below). -xl also trained cleanly for
+its full 3-epoch schedule with no sign of the late-training divergence
+described in [Training Procedure](#training-procedure) above (gradient
+clipping, added after that run, held up for the full -xl run). The
+trade-off is size: -xl's frozen backbone alone is ~7GB in bf16
+(~14GB in fp32) versus -large's ~1.1GB/~2.2GB, before adapter and head
+weights or activation memory, and it was trained on a rented H100
+(see [-xl's Training Procedure](MODEL_CARD_XL.md#training-procedure))
+rather than a single consumer card — [RunPod](https://runpod.io?ref=5jrts9za)
+is one option if you want to train or retrain it yourself. Pick -large
+for cheaper inference and faster iteration, -xl when the accuracy gap
+above matters more than that cost — particularly for `choice`-heavy
+workloads.
 
 ## Limitations and Bias
 

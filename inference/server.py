@@ -33,6 +33,7 @@ distribution's expectation over level indices — the natural reading of
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -45,30 +46,35 @@ from pydantic import BaseModel, Field
 
 try:
     from dataset import _as_text, build_example, collate
-    from model import load_checkpoint
+    from model import CONFIG_FILE, load_checkpoint, resolve_checkpoint
 except ModuleNotFoundError:
     # Local dev layout: model.py/dataset.py live one directory up from here
     # (in the Docker image they're copied as siblings instead — see build.sh).
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from dataset import _as_text, build_example, collate
-    from model import load_checkpoint
+    from model import CONFIG_FILE, load_checkpoint, resolve_checkpoint
 
 CHECKPOINT = os.environ.get("MIRAVE_CHECKPOINT", "Edoigtrd/Mirave-0.6B-xlm-roberta-large")
 DEVICE = os.environ.get("MIRAVE_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
 MAX_LENGTH = int(os.environ.get("MIRAVE_MAX_LENGTH", "512"))
 API_KEY = os.environ.get("MIRAVE_API_KEY", "dev-key")
-MODEL_NAME = "mirave-0.6b-xlm-roberta-large"
+
+# Resolved once here (rather than left to load_checkpoint) so MODEL_NAME can
+# reflect whatever checkpoint MIRAVE_CHECKPOINT actually points at — -large,
+# -xl, or a custom one — instead of a name hardcoded for one specific release.
+# Passing the already-resolved dir back into load_checkpoint below makes its
+# own resolve_checkpoint call a no-op local-path check, not a second download.
+_CHECKPOINT_DIR = resolve_checkpoint(CHECKPOINT)
+_BASE_MODEL = json.loads((_CHECKPOINT_DIR / CONFIG_FILE).read_text())["base_model"]
+MODEL_NAME = f"mirave-{_BASE_MODEL.rsplit('/', 1)[-1]}"
 
 # noul options are fixed and match training-time convention exactly:
 # index 0 = "no", index 1 = "yes".
 NOUL_OPTIONS = ["no", "yes"]
 
 
-print(f"loading checkpoint '{CHECKPOINT}' onto {DEVICE}...", flush=True)
-# load_checkpoint resolves CHECKPOINT itself — a local dir, or a HF Hub repo
-# id to download (private repos need HF_TOKEN set — this is how the Docker
-# image gets weights without baking them into the image).
-_model, _tokenizer = load_checkpoint(CHECKPOINT, device=DEVICE)
+print(f"loading checkpoint '{CHECKPOINT}' ({MODEL_NAME}) onto {DEVICE}...", flush=True)
+_model, _tokenizer = load_checkpoint(_CHECKPOINT_DIR, device=DEVICE)
 print("ready.", flush=True)
 
 
